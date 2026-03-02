@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfMonth, endOfMonth, setMonth } from "date-fns";
-import { TrendingUp, ArrowRight, ChevronRight, RefreshCw, RotateCcw } from "lucide-react";
+import { BarChart3, ArrowRight, ChevronRight, RefreshCw, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 type Contact = {
@@ -46,25 +46,23 @@ const History = ({ userId }: { userId: string }) => {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const metrics = useMemo(() => {
-    const followed = contacts.filter(c => c.followed_at);
-    const totalFollowed = followed.length;
-    const mediaSeen = contacts.filter(c => c.media_seen).length;
-    const dmed = contacts.filter(c => c.dmed_at).length;
-    const initiated = contacts.filter(c => c.initiated_at).length;
-    const engaged = contacts.filter(c => c.engaged_at).length;
-    const calendlySent = contacts.filter(c => c.calendly_sent_at).length;
-    const booked = contacts.filter(c => c.booked_at).length;
-    const followedBack = contacts.filter(c => c.followed_back).length;
+    const totalFollowed = contacts.filter(c => c.followed_at).length;
+    const a1 = contacts.filter(c => c.dmed_at).length;           // A1 = text DM sent
+    const ms = contacts.filter(c => c.media_seen).length;        // MS = they saw your media
+    const a2 = contacts.filter(c => c.initiated_at).length;      // A2 = video sent
+    const b  = contacts.filter(c => c.engaged_at).length;        // B  = positive reply
+    const c  = contacts.filter(c => c.calendly_sent_at).length;  // C  = calendly sent
+    const d  = contacts.filter(c => c.booked_at).length;         // D  = booked
+    const followedBack = contacts.filter(ct => ct.followed_back).length;
 
     return [
-      { label: "MSR", desc: "Media Seen Rate", value: totalFollowed ? ((mediaSeen / totalFollowed) * 100).toFixed(1) + "%" : "—", sub: `${mediaSeen} / ${totalFollowed}`, accent: "text-purple-500" },
-      { label: "IR", desc: "Initiation Rate", value: totalFollowed ? ((dmed / totalFollowed) * 100).toFixed(1) + "%" : "—", sub: `${dmed} / ${totalFollowed}`, accent: "text-primary" },
-      { label: "THR", desc: "Trojan Horse Rate", value: dmed ? ((initiated / dmed) * 100).toFixed(1) + "%" : "—", sub: `${initiated} / ${dmed}`, accent: "text-orange-500" },
-      { label: "PRR", desc: "Positive Reply Rate", value: initiated ? ((engaged / initiated) * 100).toFixed(1) + "%" : "—", sub: `${engaged} / ${initiated}`, accent: "text-yellow-500" },
-      { label: "CSR", desc: "Calendly Send Rate", value: engaged ? ((calendlySent / engaged) * 100).toFixed(1) + "%" : "—", sub: `${calendlySent} / ${engaged}`, accent: "text-blue-500" },
-      { label: "ABR", desc: "Booking Rate", value: calendlySent ? ((booked / calendlySent) * 100).toFixed(1) + "%" : "—", sub: `${booked} / ${calendlySent}`, accent: "text-emerald-500" },
-      { label: "FBR", desc: "Follow-Back Rate", value: totalFollowed ? ((followedBack / totalFollowed) * 100).toFixed(1) + "%" : "—", sub: `${followedBack} / ${totalFollowed}`, accent: "text-pink-500" },
-      { label: "FW", desc: "In Flywheel", value: String(flywheelCount), sub: "90-day re-queue", accent: "text-destructive" },
+      { label: "MSR", desc: "Media Seen Rate", formula: "MS ÷ A1", value: a1 ? ((ms / a1) * 100).toFixed(1) + "%" : "—", sub: `${ms} / ${a1}`, accent: "text-purple-500" },
+      { label: "IR",  desc: "Initiation Rate", formula: "A2 ÷ MS", value: ms ? ((a2 / ms) * 100).toFixed(1) + "%" : "—", sub: `${a2} / ${ms}`, accent: "text-primary" },
+      { label: "PRR", desc: "Positive Reply Rate", formula: "B ÷ A2", value: a2 ? ((b / a2) * 100).toFixed(1) + "%" : "—", sub: `${b} / ${a2}`, accent: "text-orange-500" },
+      { label: "CSR", desc: "Calendly Send Rate", formula: "C ÷ B", value: b ? ((c / b) * 100).toFixed(1) + "%" : "—", sub: `${c} / ${b}`, accent: "text-yellow-500" },
+      { label: "ABR", desc: "Appointment Book Rate", formula: "D ÷ C", value: c ? ((d / c) * 100).toFixed(1) + "%" : "—", sub: `${d} / ${c}`, accent: "text-emerald-500" },
+      { label: "FBR", desc: "Follow-Back Rate", formula: "FB ÷ Followed", value: totalFollowed ? ((followedBack / totalFollowed) * 100).toFixed(1) + "%" : "—", sub: `${followedBack} / ${totalFollowed}`, accent: "text-pink-500" },
+      { label: "FW",  desc: "In Flywheel", formula: "", value: String(flywheelCount), sub: "90-day re-queue", accent: "text-destructive" },
     ];
   }, [contacts, flywheelCount]);
 
@@ -78,6 +76,7 @@ const History = ({ userId }: { userId: string }) => {
       summary: {
         followed: cohort.filter(c => c.followed_at).length,
         dmed: cohort.filter(c => c.dmed_at).length,
+        mediaSeen: cohort.filter(c => c.media_seen).length,
         initiated: cohort.filter(c => c.initiated_at).length,
         engaged: cohort.filter(c => c.engaged_at).length,
         calendlySent: cohort.filter(c => c.calendly_sent_at).length,
@@ -99,11 +98,12 @@ const History = ({ userId }: { userId: string }) => {
 
   const funnelSteps = [
     { label: "Followed", count: monthlyCohort.summary.followed },
-    { label: "DM'd", count: monthlyCohort.summary.dmed },
-    { label: "Initiated", count: monthlyCohort.summary.initiated },
-    { label: "Engaged", count: monthlyCohort.summary.engaged },
-    { label: "Calendly", count: monthlyCohort.summary.calendlySent },
-    { label: "Booked", count: monthlyCohort.summary.booked },
+    { label: "A1 (DM)", count: monthlyCohort.summary.dmed },
+    { label: "MS", count: monthlyCohort.summary.mediaSeen },
+    { label: "A2 (Video)", count: monthlyCohort.summary.initiated },
+    { label: "B (Reply)", count: monthlyCohort.summary.engaged },
+    { label: "C (Cal.)", count: monthlyCohort.summary.calendlySent },
+    { label: "D (Book)", count: monthlyCohort.summary.booked },
   ];
 
   return (
@@ -111,21 +111,25 @@ const History = ({ userId }: { userId: string }) => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold">Analytics</h1>
-          <span className="text-xs text-muted-foreground">Funnel conversion metrics</span>
+          <BarChart3 className="h-5 w-5 text-primary" />
+          <div>
+            <h1 className="text-lg font-semibold">Analytics</h1>
+            <p className="text-xs text-muted-foreground">Stage-to-stage conversion metrics</p>
+          </div>
         </div>
       </div>
 
       {/* Metrics grid */}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         {metrics.map(m => (
-          <div key={m.label} className="rounded-lg border border-border/40 bg-card p-3 space-y-1">
+          <div key={m.label} className="rounded-lg border border-border bg-card p-3 space-y-1">
             <div className="flex items-baseline justify-between">
               <p className="text-xl font-bold tracking-tight">{m.value}</p>
               <span className={`text-[10px] font-semibold ${m.accent}`}>{m.label}</span>
             </div>
             <p className="text-[11px] text-muted-foreground leading-tight">{m.desc}</p>
             <p className="text-[10px] text-muted-foreground/70">{m.sub}</p>
+            {m.formula && <p className="text-[9px] text-muted-foreground/50 font-mono">{m.formula}</p>}
           </div>
         ))}
       </div>

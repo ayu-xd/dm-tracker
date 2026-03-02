@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { ExternalLink, ChevronRight, RotateCcw, ThumbsDown, Check } from "lucide-react";
+import { ExternalLink, ChevronRight, RotateCcw, ThumbsDown, Check, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +13,7 @@ type PipelineContact = {
   username: string | null;
   profile_link: string;
   status: string;
+  media_seen: boolean;
   current_follow_up: string | null;
   last_follow_up_at: string | null;
   a2_notes: string;
@@ -45,7 +46,7 @@ const Pipeline = ({ userId }: { userId: string }) => {
     if (!silent) setLoading(true);
     const { data, error } = await supabase
       .from("contacts")
-      .select("id, full_name, username, profile_link, status, current_follow_up, last_follow_up_at, a2_notes, b_notes, dmed_at, initiated_at, engaged_at, calendly_sent_at, booked_at")
+      .select("id, full_name, username, profile_link, status, media_seen, current_follow_up, last_follow_up_at, a2_notes, b_notes, dmed_at, initiated_at, engaged_at, calendly_sent_at, booked_at")
       .eq("user_id", userId)
       .in("status", ["dmed", "initiated", "engaged", "calendly_sent", "booked"])
       .order("dmed_at", { ascending: true });
@@ -88,6 +89,18 @@ const Pipeline = ({ userId }: { userId: string }) => {
     await supabase.from("contacts").update(updates).eq("id", contactId);
     toast.success(`Moved to ${newStatus.replace("_", " ")}`);
     fetchContacts(true);
+  };
+
+  /* Toggle media_seen on a dmed contact */
+  const toggleMediaSeen = async (contactId: string, current: boolean) => {
+    const newVal = !current;
+    setContacts(prev => prev.map(c => c.id === contactId ? { ...c, media_seen: newVal } : c));
+    if (selectedContact?.id === contactId) setSelectedContact(prev => prev ? { ...prev, media_seen: newVal } : null);
+    const updates: Record<string, any> = { media_seen: newVal };
+    if (newVal) updates.media_seen_at = new Date().toISOString();
+    else updates.media_seen_at = null;
+    await supabase.from("contacts").update(updates).eq("id", contactId);
+    toast.success(newVal ? "Marked as media seen" : "Media seen removed");
   };
 
   /* Optimistic flywheel: remove card instantly */
@@ -223,8 +236,22 @@ const Pipeline = ({ userId }: { userId: string }) => {
                           <p className="text-[11px] text-muted-foreground truncate mt-0.5">@{contact.username}</p>
                         )}
 
-                        {/* Meta: follow-up badge + days ago */}
+                        {/* Meta: media seen + follow-up badge + days ago */}
                         <div className="flex items-center gap-1.5 mt-1.5">
+                          {key === "dmed" && (
+                            <button
+                              onClick={e => { e.stopPropagation(); toggleMediaSeen(contact.id, contact.media_seen); }}
+                              className={`inline-flex items-center gap-0.5 text-[10px] rounded-md px-1.5 py-0.5 font-medium transition-colors ${
+                                contact.media_seen
+                                  ? "bg-purple-500/15 text-purple-500"
+                                  : "bg-secondary text-muted-foreground hover:text-purple-500 hover:bg-purple-500/10"
+                              }`}
+                              title={contact.media_seen ? "Media seen ✓" : "Mark as media seen"}
+                            >
+                              <Eye className="h-3 w-3" />
+                              {contact.media_seen ? "Seen" : "MS"}
+                            </button>
+                          )}
                           {contact.current_follow_up && (
                             <span className="text-[10px] rounded-md bg-primary/10 text-primary px-1.5 py-0.5 font-medium">{contact.current_follow_up}</span>
                           )}
@@ -321,6 +348,24 @@ const Pipeline = ({ userId }: { userId: string }) => {
               </SheetHeader>
 
               <div className="mt-5 space-y-5">
+                {/* Media Seen toggle (DM'd stage only) */}
+                {selectedContact.status === "dmed" && (
+                  <div className="space-y-1.5">
+                    <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Media Seen</h3>
+                    <button
+                      onClick={() => toggleMediaSeen(selectedContact.id, selectedContact.media_seen)}
+                      className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-all ${
+                        selectedContact.media_seen
+                          ? "border-purple-500/50 bg-purple-500/10 text-purple-500"
+                          : "border-border bg-secondary/60 text-muted-foreground hover:border-purple-500/30 hover:text-purple-500"
+                      }`}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      {selectedContact.media_seen ? "Media seen ✓" : "Mark as media seen"}
+                    </button>
+                  </div>
+                )}
+
                 {/* Opener */}
                 {openerText && (
                   <div className="space-y-1.5">
