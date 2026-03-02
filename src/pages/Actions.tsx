@@ -386,9 +386,9 @@ const Actions = ({ userId }: { userId: string }) => {
       onScroll={saveScroll}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-xl font-bold">Daily Actions</h1>
+          <h1 className="text-xl font-bold md:text-2xl">Daily Actions</h1>
           <p className="text-sm text-muted-foreground">{format(now, "EEEE, MMM d")}</p>
         </div>
         <div className="flex gap-2">
@@ -402,14 +402,19 @@ const Actions = ({ userId }: { userId: string }) => {
         </div>
       </div>
 
-      {/* Cute pill toggle */}
-      <div className="flex items-center gap-3 mb-3">
-        <div className="inline-flex items-center rounded-full bg-secondary p-0.5">
+      {/* Section header with toggle */}
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          {activeTab === "follow"
+            ? `Follow (${followCompleted}/${FOLLOW_LIMIT})`
+            : `DM (${dmCompleted}/${dmTotal})`}
+        </h2>
+        <div className="inline-flex items-center rounded-full border border-border p-0.5">
           <button
             onClick={() => setActiveTab("follow")}
-            className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-all ${
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
               activeTab === "follow"
-                ? "bg-foreground text-background shadow-sm"
+                ? "bg-foreground text-background"
                 : "text-muted-foreground"
             }`}
           >
@@ -417,36 +422,33 @@ const Actions = ({ userId }: { userId: string }) => {
           </button>
           <button
             onClick={() => setActiveTab("dm")}
-            className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-all ${
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
               activeTab === "dm"
-                ? "bg-foreground text-background shadow-sm"
+                ? "bg-foreground text-background"
                 : "text-muted-foreground"
             }`}
           >
             DM
           </button>
         </div>
-        <span className="text-sm font-semibold tabular-nums">
-          {activeTab === "follow" ? `${followCompleted}/${FOLLOW_LIMIT}` : `${dmCompleted}/${dmTotal}`}
-        </span>
       </div>
 
       <Progress
         value={activeTab === "follow" ? (followCompleted / FOLLOW_LIMIT) * 100 : (dmTotal ? (dmCompleted / dmTotal) * 100 : 0)}
-        className="h-2 mb-4"
+        className="h-2 mb-3"
       />
 
       {/* Follow Queue */}
       {activeTab === "follow" && (
-        <div className="space-y-1">
+        <div className="space-y-2">
           {followQueue.length === 0 && (
             <p className="py-8 text-center text-sm text-muted-foreground">No follows queued. Hit "Load Queue" to start.</p>
           )}
           {sortedFollowQueue.map((item) => (
             <div
               key={item.id}
-              className={`flex items-center gap-3 rounded-lg px-3 py-3 transition-all ${
-                item.completed ? "opacity-50" : "bg-card"
+              className={`flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-3 transition-all ${
+                item.completed ? "opacity-50" : ""
               }`}
             >
               <Checkbox
@@ -455,11 +457,11 @@ const Actions = ({ userId }: { userId: string }) => {
                 className="h-5 w-5 shrink-0"
               />
               <div className="min-w-0 flex-1">
-                <p className={`text-sm font-medium truncate ${item.completed ? "line-through" : ""}`}>
+                <p className={`text-sm font-medium ${item.completed ? "line-through" : ""}`}>
                   {item.contacts?.full_name || "Unknown"}
                 </p>
                 {item.contacts?.username && (
-                  <p className="text-xs text-muted-foreground truncate">@{item.contacts.username}</p>
+                  <p className="text-xs text-muted-foreground">@{item.contacts.username}</p>
                 )}
               </div>
               {!item.completed && (
@@ -487,7 +489,7 @@ const Actions = ({ userId }: { userId: string }) => {
 
       {/* DM Queue */}
       {activeTab === "dm" && (
-        <div className="space-y-1">
+        <div className="space-y-2">
           {dmQueue.length === 0 && (
             <p className="py-8 text-center text-sm text-muted-foreground">No DMs queued. Yesterday's completed follows will appear here.</p>
           )}
@@ -496,8 +498,8 @@ const Actions = ({ userId }: { userId: string }) => {
             return (
               <div
                 key={item.id}
-                className={`rounded-lg px-3 py-3 transition-all ${
-                  item.completed ? "opacity-50" : "bg-card"
+                className={`rounded-lg border border-border bg-card px-3 py-3 transition-all ${
+                  item.completed ? "opacity-50" : ""
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -507,11 +509,11 @@ const Actions = ({ userId }: { userId: string }) => {
                     className="h-5 w-5 shrink-0"
                   />
                   <div className="min-w-0 flex-1">
-                    <p className={`text-sm font-medium truncate ${item.completed ? "line-through" : ""}`}>
+                    <p className={`text-sm font-medium ${item.completed ? "line-through" : ""}`}>
                       {item.contacts?.full_name || "Unknown"}
                     </p>
                     {item.contacts?.username && (
-                      <p className="text-xs text-muted-foreground truncate">@{item.contacts.username}</p>
+                      <p className="text-xs text-muted-foreground">@{item.contacts.username}</p>
                     )}
                   </div>
                   <a
@@ -545,10 +547,10 @@ const Actions = ({ userId }: { userId: string }) => {
 
       {/* Follow-ups Due Section */}
       {(followUpsA.length > 0 || followUpsB.length > 0 || followUpsC.length > 0) && (
-        <section className="space-y-3 border-t border-border pt-4">
+        <section className="mt-6 space-y-3 border-t border-border pt-4">
           <div className="flex items-center gap-2">
             <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               Follow-ups Due ({followUps.length})
             </h2>
           </div>
@@ -559,30 +561,30 @@ const Actions = ({ userId }: { userId: string }) => {
             { label: "Calendly (C)", items: followUpsC, color: "text-blue-500", dotColor: "bg-blue-500" },
           ].map(({ label, items, color, dotColor }) =>
             items.length > 0 ? (
-              <div key={label} className="space-y-1.5">
+              <div key={label} className="space-y-2">
                 <div className="flex items-center gap-1.5">
                   <span className={`h-2 w-2 rounded-full ${dotColor}`} />
-                  <p className={`text-[11px] font-medium ${color}`}>{label} ({items.length})</p>
+                  <p className={`text-xs font-medium ${color}`}>{label} ({items.length})</p>
                 </div>
                 {items.map((contact) => (
-                  <div key={contact.id} className="rounded-lg bg-card border border-border/40 px-3 py-2.5 hover:border-primary/20 transition-colors group space-y-2">
+                  <div key={contact.id} className="rounded-lg border border-border bg-card px-3 py-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="text-[13px] font-medium truncate">{contact.full_name}</p>
+                          <p className="text-sm font-medium">{contact.full_name}</p>
                           <span className="text-[10px] rounded-md bg-primary/10 text-primary px-1.5 py-0.5 font-medium shrink-0">{contact.current_follow_up}</span>
                         </div>
-                        {contact.username && <p className="text-[11px] text-muted-foreground">@{contact.username}</p>}
+                        {contact.username && <p className="text-xs text-muted-foreground">@{contact.username}</p>}
                       </div>
-                      <a href={contact.profile_link} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
-                        <ExternalLink className="h-3.5 w-3.5" />
+                      <a href={contact.profile_link} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
+                        <ExternalLink className="h-4 w-4" />
                       </a>
                     </div>
                     <div className="flex gap-1.5 items-center">
-                      <Button size="sm" variant="outline" className="h-7 text-[11px] px-2.5 gap-1 flex-1 sm:flex-none" onClick={() => advanceFromFollowUp(contact)}>
+                      <Button size="sm" variant="outline" className="h-7 text-xs px-2.5 gap-1 flex-1 sm:flex-none" onClick={() => advanceFromFollowUp(contact)}>
                         <ChevronRight className="h-3 w-3" /> Replied
                       </Button>
-                      <Button size="sm" variant="secondary" className="h-7 text-[11px] px-2.5 flex-1 sm:flex-none" onClick={() => markFollowUpSent(contact)}>
+                      <Button size="sm" variant="secondary" className="h-7 text-xs px-2.5 flex-1 sm:flex-none" onClick={() => markFollowUpSent(contact)}>
                         Sent
                       </Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 shrink-0" onClick={() => negativeReply(contact.id)} title="Negative reply → Flywheel">
