@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { ExternalLink, ChevronRight, RotateCcw, ThumbsDown, Check, Eye } from "lucide-react";
+import { ExternalLink, ChevronRight, RotateCcw, ThumbsDown, Check, Eye, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,6 +41,7 @@ const Pipeline = ({ userId }: { userId: string }) => {
   const [openerText, setOpenerText] = useState("");
   const [a2Notes, setA2Notes] = useState("");
   const [bNotes, setBNotes] = useState("");
+  const [stageSearch, setStageSearch] = useState<Record<string, string>>({});
 
   const fetchContacts = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -58,7 +59,10 @@ const Pipeline = ({ userId }: { userId: string }) => {
 
   useEffect(() => { fetchContacts(); }, [fetchContacts]);
 
-  const contactsByStage = (stage: string) => contacts.filter(c => c.status === stage);
+  const contactsByStage = (stage: string) => {
+    const q = (stageSearch[stage] || "").toLowerCase().trim();
+    return contacts.filter(c => c.status === stage && (!q || c.full_name.toLowerCase().includes(q) || (c.username || "").toLowerCase().includes(q)));
+  };
 
   /* Optimistic advance: remove card instantly, then sync */
   const advanceStage = async (contactId: string, newStatus: string) => {
@@ -208,17 +212,30 @@ const Pipeline = ({ userId }: { userId: string }) => {
       <div className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-hide">
         <div className="flex gap-3 min-w-[900px] md:min-w-0 md:grid md:grid-cols-5 h-full">
           {STAGES.map(({ key, label, color, dotColor }) => {
+            const allStage = contacts.filter(c => c.status === key);
             const stageContacts = contactsByStage(key);
             return (
               <div key={key} className="flex flex-col min-h-0 w-[200px] md:w-auto shrink-0 md:shrink">
                 <div className="flex items-center gap-2 pb-2">
-                <span className={`h-2 w-2 rounded-full ${dotColor}`} />
-                <span className={`text-[11px] font-semibold uppercase tracking-wider ${color}`}>{label}</span>
-                <span className="text-[10px] text-muted-foreground ml-auto">{stageContacts.length}</span>
-              </div>
-              <div className="flex-1 overflow-y-auto scrollbar-hide space-y-1.5">
+                  <span className={`h-2 w-2 rounded-full ${dotColor}`} />
+                  <span className={`text-[11px] font-semibold uppercase tracking-wider ${color}`}>{label}</span>
+                  <span className="text-[10px] text-muted-foreground ml-auto">{stageContacts.length}</span>
+                </div>
+                {allStage.length > 0 && (
+                  <div className="relative mb-2">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/50" />
+                    <input
+                      type="text"
+                      placeholder="Search..."
+                      value={stageSearch[key] || ""}
+                      onChange={e => setStageSearch(prev => ({ ...prev, [key]: e.target.value }))}
+                      className="w-full rounded-md border border-border bg-secondary/50 pl-7 pr-2 py-1.5 text-[11px] placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                    />
+                  </div>
+                )}
+              <div className="flex-1 overflow-y-auto space-y-1.5" style={{ scrollbarWidth: 'thin' }}>
                 {stageContacts.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border/50 p-4 text-center text-[11px] text-muted-foreground/50">Empty</div>
+                  <div className="rounded-lg border border-dashed border-border/50 p-4 text-center text-[11px] text-muted-foreground/50">{allStage.length > 0 ? "No matches" : "Empty"}</div>
                 ) : (
                   stageContacts.map((contact) => {
                     const days = getDaysSince(contact);

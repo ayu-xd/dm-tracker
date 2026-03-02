@@ -107,39 +107,37 @@ const History = ({ userId }: { userId: string }) => {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <BarChart3 className="h-5 w-5 text-primary" />
-          <div>
-            <h1 className="text-lg font-semibold">Analytics</h1>
-            <p className="text-xs text-muted-foreground">Stage-to-stage conversion metrics</p>
-          </div>
+      <div className="flex items-center gap-3">
+        <BarChart3 className="h-5 w-5 text-primary shrink-0" />
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold">Analytics</h1>
+          <p className="text-xs text-muted-foreground">Stage-to-stage conversion</p>
         </div>
       </div>
 
       {/* Metrics grid */}
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4 md:gap-2">
         {metrics.map(m => (
-          <div key={m.label} className="rounded-lg border border-border bg-card p-3 space-y-1">
-            <div className="flex items-baseline justify-between">
-              <p className="text-xl font-bold tracking-tight">{m.value}</p>
-              <span className={`text-[10px] font-semibold ${m.accent}`}>{m.label}</span>
+          <div key={m.label} className="rounded-lg border border-border bg-card px-2.5 py-2 space-y-0.5">
+            <div className="flex items-baseline justify-between gap-1">
+              <p className="text-lg font-bold tracking-tight leading-tight">{m.value}</p>
+              <span className={`text-[9px] font-semibold ${m.accent}`}>{m.label}</span>
             </div>
-            <p className="text-[11px] text-muted-foreground leading-tight">{m.desc}</p>
-            <p className="text-[10px] text-muted-foreground/70">{m.sub}</p>
-            {m.formula && <p className="text-[9px] text-muted-foreground/50 font-mono">{m.formula}</p>}
+            <p className="text-[10px] text-muted-foreground leading-tight">{m.desc}</p>
+            <p className="text-[9px] text-muted-foreground/60">{m.sub}</p>
+            {m.formula && <p className="text-[8px] text-muted-foreground/40 font-mono">{m.formula}</p>}
           </div>
         ))}
       </div>
 
       {/* Monthly Cohort */}
-      <div className="space-y-4 border-t border-border pt-5">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Monthly Cohort</h2>
+      <div className="space-y-4 border-t border-border pt-4">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider shrink-0">Monthly Cohort</h2>
           <Select value={String(selectedMonth)} onValueChange={v => setSelectedMonth(parseInt(v))}>
-            <SelectTrigger className="w-[160px] h-8 text-xs">
+            <SelectTrigger className="w-[130px] h-7 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -150,18 +148,18 @@ const History = ({ userId }: { userId: string }) => {
           </Select>
         </div>
 
-        {/* Funnel visualization */}
-        <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide pb-1">
+        {/* Funnel visualization — wraps on mobile */}
+        <div className="flex flex-wrap items-center gap-1 pb-1">
           {funnelSteps.map((step, i) => (
             <div key={step.label} className="flex items-center gap-1">
-              <div className={`shrink-0 rounded-md px-3 py-1.5 text-center ${
-                step.label === "Booked" ? "bg-primary/10 text-primary" : "bg-secondary"
+              <div className={`rounded-md px-2 py-1 text-center ${
+                step.label === "D (Book)" ? "bg-primary/10 text-primary" : "bg-secondary"
               }`}>
-                <p className="text-lg font-bold leading-tight">{step.count}</p>
-                <p className="text-[10px] text-muted-foreground">{step.label}</p>
+                <p className="text-base font-bold leading-tight">{step.count}</p>
+                <p className="text-[9px] text-muted-foreground whitespace-nowrap">{step.label}</p>
               </div>
               {i < funnelSteps.length - 1 && (
-                <ArrowRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/40 shrink-0" />
               )}
             </div>
           ))}
