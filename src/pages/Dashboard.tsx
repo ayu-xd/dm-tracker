@@ -218,8 +218,8 @@ const Dashboard = ({ userId }: { userId: string }) => {
   return (
     <div ref={containerRef} className="space-y-6 pull-to-refresh -mt-2">
       <PullIndicator />
-      {/* ── Compact header: icon + greeting + stats in one tight row ── */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      {/* ── Header ── */}
+      <div className="space-y-3">
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-2xl leading-none">☀️</span>
           <div className="min-w-0">
@@ -232,39 +232,39 @@ const Dashboard = ({ userId }: { userId: string }) => {
           </div>
         </div>
 
-        {/* Inline stat pills */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={() => navigate("/actions")} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium notion-hover transition-all">
+        {/* Stat pills — horizontal scroll on mobile */}
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1">
+          <button onClick={() => navigate("/actions")} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium notion-hover transition-all whitespace-nowrap shrink-0">
             <Users className="h-3 w-3 text-blue-500" strokeWidth={2} />
             <span className="text-foreground">{followCount.done}</span>
-            <span className="text-muted-foreground">/ {followCount.total || 30} follows</span>
+            <span className="text-muted-foreground">/ {followCount.total || 30}</span>
           </button>
-          <button onClick={() => navigate("/actions")} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium notion-hover transition-all">
+          <button onClick={() => navigate("/actions")} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium notion-hover transition-all whitespace-nowrap shrink-0">
             <MessageSquare className="h-3 w-3 text-purple-500" strokeWidth={2} />
             <span className="text-foreground">{dmCount.done}</span>
             <span className="text-muted-foreground">/ {dmCount.total} DMs</span>
           </button>
           {totalFollowUpsDue > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0">
               <Clock className="h-3 w-3 text-amber-600" strokeWidth={2} />
-              <span className="text-amber-700">{totalFollowUpsDue} follow-ups due</span>
+              <span className="text-amber-700">{totalFollowUpsDue} due</span>
             </span>
           )}
-          <button onClick={() => navigate("/pipeline")} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium notion-hover transition-all">
+          <button onClick={() => navigate("/pipeline")} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium notion-hover transition-all whitespace-nowrap shrink-0">
             <span className="text-foreground">{totalPipeline}</span>
-            <span className="text-muted-foreground">in pipeline</span>
+            <span className="text-muted-foreground">pipeline</span>
             <ChevronRight className="h-3 w-3 text-muted-foreground" />
           </button>
         </div>
       </div>
 
-      {/* ── Pipeline bar — compact ── */}
+      {/* ── Pipeline bar — scrollable on mobile ── */}
       <div className="rounded-lg border border-border overflow-hidden">
-        <div className="flex divide-x divide-border bg-muted/30">
+        <div className="flex divide-x divide-border bg-muted/30 overflow-x-auto scrollbar-hide">
           {pipelineStages.map((stage) => (
-            <div key={stage.label} className="flex-1 px-3 py-2.5 text-center min-w-0">
-              <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${stage.color}`}>{stage.label}</span>
-              <p className="mt-1 text-xl font-bold tracking-tight">{stage.count}</p>
+            <div key={stage.label} className="flex-1 min-w-[64px] px-2 py-2.5 text-center">
+              <span className={`inline-flex items-center rounded px-1 py-0.5 text-[9px] sm:text-[10px] font-medium ${stage.color}`}>{stage.label}</span>
+              <p className="mt-1 text-lg sm:text-xl font-bold tracking-tight">{stage.count}</p>
             </div>
           ))}
         </div>
@@ -292,10 +292,7 @@ const Dashboard = ({ userId }: { userId: string }) => {
             )}
           </div>
 
-          <div
-            className="grid gap-4"
-            style={{ gridTemplateColumns: `repeat(${visibleColumns.length}, minmax(0, 1fr))` }}
-          >
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {visibleColumns.map((col) => {
               const items = followUpsByLetter[col.key] || [];
               return (

@@ -503,25 +503,27 @@ const Actions = ({ userId }: { userId: string }) => {
                   <p className={`text-[11px] font-medium ${color}`}>{label} ({items.length})</p>
                 </div>
                 {items.map((contact) => (
-                  <div key={contact.id} className="flex items-center gap-2 rounded-lg bg-card border border-border/40 px-3 py-2.5 hover:border-primary/20 transition-colors group">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[13px] font-medium truncate">{contact.full_name}</p>
-                        <span className="text-[10px] rounded-md bg-primary/10 text-primary px-1.5 py-0.5 font-medium">{contact.current_follow_up}</span>
+                  <div key={contact.id} className="rounded-lg bg-card border border-border/40 px-3 py-2.5 hover:border-primary/20 transition-colors group space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[13px] font-medium truncate">{contact.full_name}</p>
+                          <span className="text-[10px] rounded-md bg-primary/10 text-primary px-1.5 py-0.5 font-medium shrink-0">{contact.current_follow_up}</span>
+                        </div>
+                        {contact.username && <p className="text-[11px] text-muted-foreground">@{contact.username}</p>}
                       </div>
-                      {contact.username && <p className="text-[11px] text-muted-foreground">@{contact.username}</p>}
-                    </div>
-                    <div className="flex gap-1 shrink-0 items-center">
-                      <a href={contact.profile_link} target="_blank" rel="noopener noreferrer" className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors opacity-60 group-hover:opacity-100">
+                      <a href={contact.profile_link} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
-                      <Button size="sm" variant="outline" className="h-7 text-[11px] px-2.5 gap-1" onClick={() => advanceFromFollowUp(contact)}>
+                    </div>
+                    <div className="flex gap-1.5 items-center">
+                      <Button size="sm" variant="outline" className="h-7 text-[11px] px-2.5 gap-1 flex-1 sm:flex-none" onClick={() => advanceFromFollowUp(contact)}>
                         <ChevronRight className="h-3 w-3" /> Replied
                       </Button>
-                      <Button size="sm" variant="secondary" className="h-7 text-[11px] px-2.5" onClick={() => markFollowUpSent(contact)}>
+                      <Button size="sm" variant="secondary" className="h-7 text-[11px] px-2.5 flex-1 sm:flex-none" onClick={() => markFollowUpSent(contact)}>
                         Sent
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10" onClick={() => negativeReply(contact.id)} title="Negative reply → Flywheel">
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 shrink-0" onClick={() => negativeReply(contact.id)} title="Negative reply → Flywheel">
                         <ThumbsDown className="h-3 w-3" />
                       </Button>
                     </div>

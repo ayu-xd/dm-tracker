@@ -175,29 +175,30 @@ const Pipeline = ({ userId }: { userId: string }) => {
   return (
     <div className="h-[calc(100vh-5rem)] md:h-[calc(100vh-2rem)] flex flex-col">
       {/* Compact header bar */}
-      <div className="flex items-center justify-between pb-3 mb-3 border-b border-border">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between pb-3 mb-3 border-b border-border gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <h1 className="text-lg font-semibold">Pipeline</h1>
-          <span className="text-xs text-muted-foreground">{contacts.length} active</span>
+          <span className="text-xs text-muted-foreground">{contacts.length}</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
           {STAGES.map(({ key, label, color, dotColor }) => (
-            <div key={key} className="flex items-center gap-1.5">
+            <div key={key} className="flex items-center gap-1 shrink-0">
               <span className={`h-2 w-2 rounded-full ${dotColor}`} />
-              <span className="text-[11px] text-muted-foreground hidden md:inline">{label}</span>
+              <span className="text-[11px] text-muted-foreground hidden sm:inline">{label}</span>
               <span className="text-xs font-semibold text-foreground">{contactsByStage(key).length}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* 5-column board */}
-      <div className="flex-1 overflow-hidden flex flex-col md:grid md:grid-cols-5 md:gap-3">
-        {STAGES.map(({ key, label, color, dotColor }) => {
-          const stageContacts = contactsByStage(key);
-          return (
-            <div key={key} className="flex flex-col min-h-0 mb-4 md:mb-0">
-              <div className="flex items-center gap-2 pb-2">
+      {/* 5-column board — scrollable on mobile */}
+      <div className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-hide">
+        <div className="flex gap-3 min-w-[900px] md:min-w-0 md:grid md:grid-cols-5 h-full">
+          {STAGES.map(({ key, label, color, dotColor }) => {
+            const stageContacts = contactsByStage(key);
+            return (
+              <div key={key} className="flex flex-col min-h-0 w-[200px] md:w-auto shrink-0 md:shrink">
+                <div className="flex items-center gap-2 pb-2">
                 <span className={`h-2 w-2 rounded-full ${dotColor}`} />
                 <span className={`text-[11px] font-semibold uppercase tracking-wider ${color}`}>{label}</span>
                 <span className="text-[10px] text-muted-foreground ml-auto">{stageContacts.length}</span>
@@ -235,9 +236,9 @@ const Pipeline = ({ userId }: { userId: string }) => {
                           )}
                         </div>
 
-                        {/* Hover overlay actions — profile link + advance + flywheel */}
+                        {/* Action buttons — always visible on mobile, hover on desktop */}
                         {key !== "booked" && (
-                          <div className="flex items-center gap-1 mt-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center gap-1 mt-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                             <a
                               href={contact.profile_link}
                               target="_blank"
@@ -272,6 +273,7 @@ const Pipeline = ({ userId }: { userId: string }) => {
             </div>
           );
         })}
+        </div>
       </div>
 
       {/* Contact Detail Drawer */}

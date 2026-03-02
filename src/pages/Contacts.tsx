@@ -138,13 +138,13 @@ const Contacts = ({ userId }: { userId: string }) => {
                 href={contact.profile_link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors opacity-60 group-hover:opacity-100"
+                className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
               <button
                 onClick={() => deleteContact(contact.id)}
-                className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors opacity-60 md:opacity-0 md:group-hover:opacity-100"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>

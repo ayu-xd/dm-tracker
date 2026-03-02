@@ -270,12 +270,14 @@ const FlywheelSection = ({ userId }: { userId: string }) => {
           {showDaysLeft && (
             <span className="text-[10px] text-muted-foreground/60 tabular-nums shrink-0">{daysLeft}d left</span>
           )}
+        </div>
+        <div className="flex items-center gap-2">
           <button onClick={() => setOpenPicker(isPickerOpen ? null : c.id)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors">
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors">
             Move to stage
           </button>
           <button onClick={() => reinitiate(c.id)}
-            className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-[11px] text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
             title="Full reset — back to follow queue">
             <RotateCcw className="h-3 w-3" /> Reset
           </button>
