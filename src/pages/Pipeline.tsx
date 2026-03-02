@@ -76,6 +76,9 @@ const Pipeline = ({ userId }: { userId: string }) => {
       updates.initiated_at = nowIso;
       updates.current_follow_up = "1A";
       updates.last_follow_up_at = nowIso;
+      // If they reached Initiated, they must have seen media
+      updates.media_seen = true;
+      updates.media_seen_at = nowIso;
     } else if (newStatus === "engaged") {
       updates.engaged_at = nowIso;
       updates.current_follow_up = "1B";
