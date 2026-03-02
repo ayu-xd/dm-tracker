@@ -382,32 +382,32 @@ const Actions = ({ userId }: { userId: string }) => {
   return (
     <div
       ref={scrollRef}
-      className="space-y-4 h-[calc(100vh-5rem)] md:h-[calc(100vh-2rem)] overflow-y-auto scrollbar-hide pb-4"
+      className="h-[calc(100vh-5rem)] md:h-[calc(100vh-2rem)] overflow-y-auto overflow-x-hidden scrollbar-hide pb-4"
       onScroll={saveScroll}
     >
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-bold">Daily Actions</h1>
-          <p className="text-sm text-muted-foreground">{format(now, "EEE, MMM d")}</p>
+          <p className="text-sm text-muted-foreground">{format(now, "EEEE, MMM d")}</p>
         </div>
         <div className="flex gap-2">
           {followQueue.length === 0 && (
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={autoQueue}>Load Queue</Button>
+            <Button variant="outline" size="sm" onClick={autoQueue}>Load Queue</Button>
           )}
-          <Button size="sm" className="h-8 text-xs gap-1" onClick={generateOpeners} disabled={generating}>
-            <Zap className="h-3.5 w-3.5" />
+          <Button size="sm" onClick={generateOpeners} disabled={generating}>
+            <Zap className="mr-1 h-3.5 w-3.5" />
             <span className="hidden sm:inline">{generating ? "..." : "Openers"}</span>
           </Button>
         </div>
       </div>
 
-      {/* Compact toggle + progress */}
-      <div className="flex items-center gap-3">
-        <div className="inline-flex items-center rounded-full bg-secondary/70 p-0.5">
+      {/* Cute pill toggle */}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="inline-flex items-center rounded-full bg-secondary p-0.5">
           <button
             onClick={() => setActiveTab("follow")}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+            className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-all ${
               activeTab === "follow"
                 ? "bg-foreground text-background shadow-sm"
                 : "text-muted-foreground"
@@ -417,7 +417,7 @@ const Actions = ({ userId }: { userId: string }) => {
           </button>
           <button
             onClick={() => setActiveTab("dm")}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+            className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-all ${
               activeTab === "dm"
                 ? "bg-foreground text-background shadow-sm"
                 : "text-muted-foreground"
@@ -429,13 +429,12 @@ const Actions = ({ userId }: { userId: string }) => {
         <span className="text-sm font-semibold tabular-nums">
           {activeTab === "follow" ? `${followCompleted}/${FOLLOW_LIMIT}` : `${dmCompleted}/${dmTotal}`}
         </span>
-        <div className="flex-1">
-          <Progress
-            value={activeTab === "follow" ? (followCompleted / FOLLOW_LIMIT) * 100 : (dmTotal ? (dmCompleted / dmTotal) * 100 : 0)}
-            className="h-1.5"
-          />
-        </div>
       </div>
+
+      <Progress
+        value={activeTab === "follow" ? (followCompleted / FOLLOW_LIMIT) * 100 : (dmTotal ? (dmCompleted / dmTotal) * 100 : 0)}
+        className="h-2 mb-4"
+      />
 
       {/* Follow Queue */}
       {activeTab === "follow" && (
@@ -446,21 +445,39 @@ const Actions = ({ userId }: { userId: string }) => {
           {sortedFollowQueue.map((item) => (
             <div
               key={item.id}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-200 group ${
-                item.completed ? "opacity-40" : "bg-card"
+              className={`flex items-center gap-3 rounded-lg px-3 py-3 transition-all ${
+                item.completed ? "opacity-50" : "bg-card"
               }`}
             >
-              <Checkbox checked={item.completed} onCheckedChange={() => toggleComplete(item.id, item.completed, "follow", item.contact_id)} className="h-5 w-5 shrink-0" />
+              <Checkbox
+                checked={item.completed}
+                onCheckedChange={() => toggleComplete(item.id, item.completed, "follow", item.contact_id)}
+                className="h-5 w-5 shrink-0"
+              />
               <div className="min-w-0 flex-1">
-                <p className={`text-sm font-medium truncate ${item.completed ? "line-through" : ""}`}>{item.contacts?.full_name || "Unknown"}</p>
-                {item.contacts?.username && <p className="text-xs text-muted-foreground">@{item.contacts.username}</p>}
+                <p className={`text-sm font-medium truncate ${item.completed ? "line-through" : ""}`}>
+                  {item.contacts?.full_name || "Unknown"}
+                </p>
+                {item.contacts?.username && (
+                  <p className="text-xs text-muted-foreground truncate">@{item.contacts.username}</p>
+                )}
               </div>
               {!item.completed && (
-                <button onClick={() => removeFromQueue(item.id, item.contact_id, "follow")} className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors md:opacity-0 md:group-hover:opacity-100" title="Remove & replace">
+                <button
+                  onClick={() => removeFromQueue(item.id, item.contact_id, "follow")}
+                  className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
+                  title="Remove"
+                >
                   <X className="h-4 w-4" />
                 </button>
               )}
-              <a href={item.contacts?.profile_link} target="_blank" rel="noopener noreferrer" onClick={() => handleProfileClick(item)} className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
+              <a
+                href={item.contacts?.profile_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => handleProfileClick(item)}
+                className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+              >
                 <ExternalLink className="h-4 w-4" />
               </a>
             </div>
@@ -479,24 +496,43 @@ const Actions = ({ userId }: { userId: string }) => {
             return (
               <div
                 key={item.id}
-                className={`rounded-lg px-3 py-2.5 transition-all duration-200 group ${
-                  item.completed ? "opacity-40" : "bg-card"
+                className={`rounded-lg px-3 py-3 transition-all ${
+                  item.completed ? "opacity-50" : "bg-card"
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Checkbox checked={item.completed} onCheckedChange={() => toggleComplete(item.id, item.completed, "dm", item.contact_id)} className="h-5 w-5 shrink-0" />
+                  <Checkbox
+                    checked={item.completed}
+                    onCheckedChange={() => toggleComplete(item.id, item.completed, "dm", item.contact_id)}
+                    className="h-5 w-5 shrink-0"
+                  />
                   <div className="min-w-0 flex-1">
-                    <p className={`text-sm font-medium truncate ${item.completed ? "line-through" : ""}`}>{item.contacts?.full_name || "Unknown"}</p>
-                    {item.contacts?.username && <p className="text-xs text-muted-foreground">@{item.contacts.username}</p>}
+                    <p className={`text-sm font-medium truncate ${item.completed ? "line-through" : ""}`}>
+                      {item.contacts?.full_name || "Unknown"}
+                    </p>
+                    {item.contacts?.username && (
+                      <p className="text-xs text-muted-foreground truncate">@{item.contacts.username}</p>
+                    )}
                   </div>
-                  <a href={item.contacts?.profile_link} target="_blank" rel="noopener noreferrer" onClick={() => handleProfileClick(item)} className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
+                  <a
+                    href={item.contacts?.profile_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => handleProfileClick(item)}
+                    className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                  >
                     <ExternalLink className="h-4 w-4" />
                   </a>
                 </div>
                 {opener && !item.completed && (
                   <div className="mt-2 ml-8 flex items-center gap-2">
-                    <p className="flex-1 rounded-md bg-secondary/60 px-3 py-2 text-sm text-secondary-foreground">{opener}</p>
-                    <button onClick={() => copyOpener(opener)} className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors" title="Copy opener">
+                    <p className="flex-1 min-w-0 rounded-md bg-secondary px-3 py-2 text-sm text-secondary-foreground break-words">
+                      {opener}
+                    </p>
+                    <button
+                      onClick={() => copyOpener(opener)}
+                      className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                    >
                       <Copy className="h-4 w-4" />
                     </button>
                   </div>
