@@ -1,9 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfMonth, endOfMonth, setMonth } from "date-fns";
-import { BarChart3, ArrowRight, ChevronRight, RefreshCw, RotateCcw } from "lucide-react";
+import { BarChart3, ChevronRight, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 type Contact = {
@@ -45,143 +44,108 @@ const History = ({ userId }: { userId: string }) => {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const metrics = useMemo(() => {
-    const totalFollowed = contacts.filter(c => c.followed_at).length;
-    const a1 = contacts.filter(c => c.dmed_at).length;           // A1 = text DM sent
-    const ms = contacts.filter(c => c.media_seen).length;        // MS = they saw your media
-    const a2 = contacts.filter(c => c.initiated_at).length;      // A2 = video sent
-    const b  = contacts.filter(c => c.engaged_at).length;        // B  = positive reply
-    const c  = contacts.filter(c => c.calendly_sent_at).length;  // C  = calendly sent
-    const d  = contacts.filter(c => c.booked_at).length;         // D  = booked
-    const followedBack = contacts.filter(ct => ct.followed_back).length;
-
-    return [
-      { label: "MSR", desc: "Media Seen Rate", formula: "MS ÷ A1", value: a1 ? ((ms / a1) * 100).toFixed(1) + "%" : "—", sub: `${ms} / ${a1}`, accent: "text-purple-500" },
-      { label: "IR",  desc: "Initiation Rate", formula: "A2 ÷ MS", value: ms ? ((a2 / ms) * 100).toFixed(1) + "%" : "—", sub: `${a2} / ${ms}`, accent: "text-primary" },
-      { label: "PRR", desc: "Positive Reply Rate", formula: "B ÷ A2", value: a2 ? ((b / a2) * 100).toFixed(1) + "%" : "—", sub: `${b} / ${a2}`, accent: "text-orange-500" },
-      { label: "CSR", desc: "Calendly Send Rate", formula: "C ÷ B", value: b ? ((c / b) * 100).toFixed(1) + "%" : "—", sub: `${c} / ${b}`, accent: "text-yellow-500" },
-      { label: "ABR", desc: "Appointment Book Rate", formula: "D ÷ C", value: c ? ((d / c) * 100).toFixed(1) + "%" : "—", sub: `${d} / ${c}`, accent: "text-emerald-500" },
-      { label: "FBR", desc: "Follow-Back Rate", formula: "FB ÷ Followed", value: totalFollowed ? ((followedBack / totalFollowed) * 100).toFixed(1) + "%" : "—", sub: `${followedBack} / ${totalFollowed}`, accent: "text-pink-500" },
-      { label: "FW",  desc: "In Flywheel", formula: "", value: String(flywheelCount), sub: "90-day re-queue", accent: "text-destructive" },
-    ];
-  }, [contacts, flywheelCount]);
-
-  const monthlyCohort = useMemo(() => {
+  const monthlyMetrics = useMemo(() => {
     const year = new Date().getFullYear();
     const start = startOfMonth(setMonth(new Date(year, 0), selectedMonth));
     const end = endOfMonth(start);
-    const cohort = contacts.filter(c => { const d = new Date(c.followed_at || c.created_at); return d >= start && d <= end; });
+
+    const inMonth = (dateStr: string | null) => {
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      return d >= start && d <= end;
+    };
+
+    // A1 cohort: contacts whose dmed_at falls in the selected month
+    const a1Contacts = contacts.filter(c => inMonth(c.dmed_at));
+    const a1 = a1Contacts.length;
+    const ms = a1Contacts.filter(c => c.media_seen).length;
+    const a2 = a1Contacts.filter(c => c.initiated_at).length;
+    const b = a1Contacts.filter(c => c.engaged_at).length;
+    const cCount = a1Contacts.filter(c => c.calendly_sent_at).length;
+    const d = a1Contacts.filter(c => c.booked_at).length;
+
+    // FBR: contacts whose followed_at falls in the selected month
+    const followedContacts = contacts.filter(c => inMonth(c.followed_at));
+    const totalFollowed = followedContacts.length;
+    const followedBack = followedContacts.filter(c => c.followed_back).length;
+
+    const pct = (num: number, den: number) => den ? ((num / den) * 100).toFixed(1) + "%" : "—";
+
     return {
-      cohort,
-      summary: {
-        followed: cohort.filter(c => c.followed_at).length,
-        dmed: cohort.filter(c => c.dmed_at).length,
-        mediaSeen: cohort.filter(c => c.media_seen).length,
-        initiated: cohort.filter(c => c.initiated_at).length,
-        engaged: cohort.filter(c => c.engaged_at).length,
-        calendlySent: cohort.filter(c => c.calendly_sent_at).length,
-        booked: cohort.filter(c => c.booked_at).length,
-      },
+      cards: [
+        { label: "MSR", overall: pct(ms, a1), overallLabel: "÷A1", stage: pct(ms, a1), stageLabel: "→MS", raw: `${ms}/${a1}`, accent: "text-purple-500" },
+        { label: "IR", overall: pct(a2, a1), overallLabel: "÷A1", stage: pct(a2, ms), stageLabel: "MS→A2", raw: `${a2}/${a1}`, accent: "text-primary" },
+        { label: "PRR", overall: pct(b, a1), overallLabel: "÷A1", stage: pct(b, a2), stageLabel: "A2→B", raw: `${b}/${a1}`, accent: "text-orange-500" },
+        { label: "CSR", overall: pct(cCount, a1), overallLabel: "÷A1", stage: pct(cCount, b), stageLabel: "B→C", raw: `${cCount}/${a1}`, accent: "text-yellow-500" },
+        { label: "ABR", overall: pct(d, a1), overallLabel: "÷A1", stage: pct(d, cCount), stageLabel: "C→D", raw: `${d}/${a1}`, accent: "text-emerald-500" },
+        { label: "FBR", overall: pct(followedBack, totalFollowed), overallLabel: "÷Fol", stage: pct(followedBack, totalFollowed), stageLabel: "→FB", raw: `${followedBack}/${totalFollowed}`, accent: "text-pink-500" },
+      ],
+      funnel: [
+        { label: "Fol", count: totalFollowed },
+        { label: "A1", count: a1 },
+        { label: "MS", count: ms },
+        { label: "A2", count: a2 },
+        { label: "B", count: b },
+        { label: "C", count: cCount },
+        { label: "D", count: d },
+      ],
     };
   }, [contacts, selectedMonth]);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-muted-foreground">Loading...</div>;
 
-  const statusColor = (s: string) =>
-    s === "booked" ? "bg-emerald-500/15 text-emerald-500"
-    : s === "calendly_sent" ? "bg-blue-500/15 text-blue-500"
-    : s === "engaged" ? "bg-yellow-500/15 text-yellow-600"
-    : s === "initiated" ? "bg-orange-500/15 text-orange-500"
-    : s === "dmed" ? "bg-primary/15 text-primary"
-    : s === "flywheel" ? "bg-destructive/15 text-destructive"
-    : "bg-secondary text-secondary-foreground";
-
-  const funnelSteps = [
-    { label: "Followed", count: monthlyCohort.summary.followed },
-    { label: "A1 (DM)", count: monthlyCohort.summary.dmed },
-    { label: "MS", count: monthlyCohort.summary.mediaSeen },
-    { label: "A2 (Video)", count: monthlyCohort.summary.initiated },
-    { label: "B (Reply)", count: monthlyCohort.summary.engaged },
-    { label: "C (Cal.)", count: monthlyCohort.summary.calendlySent },
-    { label: "D (Book)", count: monthlyCohort.summary.booked },
-  ];
-
   return (
-    <div className="space-y-5 overflow-x-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <BarChart3 className="h-5 w-5 text-primary shrink-0" />
-        <div className="min-w-0">
+    <div className="space-y-3 overflow-x-hidden">
+      {/* Header — title left, month selector right */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="h-5 w-5 text-primary shrink-0" />
           <h1 className="text-lg font-semibold">Analytics</h1>
-          <p className="text-xs text-muted-foreground">Stage-to-stage conversion</p>
         </div>
+        <Select value={String(selectedMonth)} onValueChange={v => setSelectedMonth(parseInt(v))}>
+          <SelectTrigger className="w-[120px] h-7 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MONTHS.map((m, i) => (
+              <SelectItem key={i} value={String(i)}>{m}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {/* Metrics grid */}
-      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4 md:gap-2">
-        {metrics.map(m => (
-          <div key={m.label} className="rounded-lg border border-border bg-card px-2.5 py-2 space-y-0.5">
-            <div className="flex items-baseline justify-between gap-1">
-              <p className="text-lg font-bold tracking-tight leading-tight">{m.value}</p>
-              <span className={`text-[9px] font-semibold ${m.accent}`}>{m.label}</span>
-            </div>
-            <p className="text-[10px] text-muted-foreground leading-tight">{m.desc}</p>
-            <p className="text-[9px] text-muted-foreground/60">{m.sub}</p>
-            {m.formula && <p className="text-[8px] text-muted-foreground/40 font-mono">{m.formula}</p>}
+      {/* Ultra-compact metrics grid — 3 cols mobile, 6 cols desktop */}
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-1">
+        {monthlyMetrics.cards.map(m => (
+          <div key={m.label} className="rounded-md border border-border bg-card px-1.5 py-1.5 text-center">
+            <p className={`text-[11px] font-bold leading-none ${m.accent}`}>{m.label}</p>
+            <p className="text-sm font-bold leading-tight mt-0.5">{m.overall}</p>
+            <p className="text-[9px] text-muted-foreground/50 leading-none">{m.overallLabel}</p>
+            <p className="text-xs font-semibold leading-tight mt-0.5">{m.stage}</p>
+            <p className="text-[9px] text-muted-foreground/50 leading-none">{m.stageLabel}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5 leading-none">{m.raw}</p>
           </div>
         ))}
       </div>
 
-      {/* Monthly Cohort */}
-      <div className="space-y-4 border-t border-border pt-4">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider shrink-0">Monthly Cohort</h2>
-          <Select value={String(selectedMonth)} onValueChange={v => setSelectedMonth(parseInt(v))}>
-            <SelectTrigger className="w-[130px] h-7 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MONTHS.map((m, i) => (
-                <SelectItem key={i} value={String(i)}>{m}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Funnel visualization — wraps on mobile */}
-        <div className="flex flex-wrap items-center gap-1 pb-1">
-          {funnelSteps.map((step, i) => (
-            <div key={step.label} className="flex items-center gap-1">
-              <div className={`rounded-md px-2 py-1 text-center ${
-                step.label === "D (Book)" ? "bg-primary/10 text-primary" : "bg-secondary"
-              }`}>
-                <p className="text-base font-bold leading-tight">{step.count}</p>
-                <p className="text-[9px] text-muted-foreground whitespace-nowrap">{step.label}</p>
-              </div>
-              {i < funnelSteps.length - 1 && (
-                <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/40 shrink-0" />
-              )}
+      {/* Compact funnel — single row of numbers with FW indicator */}
+      <div className="flex items-center justify-center gap-0.5 flex-wrap py-1">
+        {monthlyMetrics.funnel.map((step, i) => (
+          <div key={step.label} className="flex items-center gap-0.5">
+            <div className="text-center min-w-[24px]">
+              <p className="text-sm font-bold leading-none">{step.count}</p>
+              <p className="text-[8px] text-muted-foreground leading-tight">{step.label}</p>
             </div>
-          ))}
-        </div>
-
-        {/* Cohort contact list */}
-        <div className="space-y-1">
-          {monthlyCohort.cohort.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">No contacts in {MONTHS[selectedMonth]}</p>
-          ) : (
-            monthlyCohort.cohort.map(c => (
-              <div key={c.id} className="flex items-center gap-3 rounded-lg bg-card border border-border/40 px-3 py-2 hover:border-primary/20 transition-colors">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-medium truncate">{c.full_name}</p>
-                  {c.username && <p className="text-[11px] text-muted-foreground">@{c.username}</p>}
-                </div>
-                <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${statusColor(c.status)}`}>
-                  {c.status.replace("_", " ")}
-                </span>
-              </div>
-            ))
-          )}
+            {i < monthlyMetrics.funnel.length - 1 && (
+              <span className="text-[10px] text-muted-foreground/40">→</span>
+            )}
+          </div>
+        ))}
+        <div className="flex items-center gap-0.5 ml-1.5 pl-1.5 border-l border-border">
+          <div className="text-center min-w-[24px]">
+            <p className="text-sm font-bold leading-none text-destructive">{flywheelCount}</p>
+            <p className="text-[8px] text-muted-foreground leading-tight">FW</p>
+          </div>
         </div>
       </div>
 
