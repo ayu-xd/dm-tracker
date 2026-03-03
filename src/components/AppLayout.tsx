@@ -11,7 +11,7 @@ const navItems = [
   { to: "/actions", icon: ListChecks, label: "Daily Actions" },
   { to: "/pipeline", icon: GitBranch, label: "Pipeline" },
   { to: "/contacts", icon: Users, label: "Contacts" },
-  { to: "/history", icon: BarChart3, label: "Analytics" },
+  { to: "/analytics", icon: BarChart3, label: "Analytics" },
 ];
 
 const AppLayout = ({ children }: { children: React.ReactNode }) => {

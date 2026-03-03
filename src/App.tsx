@@ -49,7 +49,8 @@ const ProtectedApp = () => {
         <Route path="/actions" element={<Actions userId={userId} />} />
         <Route path="/contacts" element={<Contacts userId={userId} />} />
         <Route path="/pipeline" element={<Pipeline userId={userId} />} />
-        <Route path="/history" element={<History userId={userId} />} />
+        <Route path="/analytics" element={<History userId={userId} />} />
+        <Route path="/history" element={<Navigate to="/analytics" replace />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>

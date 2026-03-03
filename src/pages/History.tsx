@@ -28,6 +28,7 @@ const History = ({ userId }: { userId: string }) => {
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [flywheelCount, setFlywheelCount] = useState(0);
+  const [metricView, setMetricView] = useState<"overall" | "stage">("overall");
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -96,22 +97,46 @@ const History = ({ userId }: { userId: string }) => {
 
   return (
     <div className="space-y-3 overflow-x-hidden">
-      {/* Header — title left, month selector right */}
+      {/* Header — title left, toggle + month selector right */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-primary shrink-0" />
           <h1 className="text-lg font-semibold">Analytics</h1>
         </div>
-        <Select value={String(selectedMonth)} onValueChange={v => setSelectedMonth(parseInt(v))}>
-          <SelectTrigger className="w-[120px] h-7 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {MONTHS.map((m, i) => (
-              <SelectItem key={i} value={String(i)}>{m}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center rounded-full border border-border p-0.5">
+            <button
+              onClick={() => setMetricView("overall")}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                metricView === "overall"
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground"
+              }`}
+            >
+              Overall
+            </button>
+            <button
+              onClick={() => setMetricView("stage")}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                metricView === "stage"
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground"
+              }`}
+            >
+              Stage
+            </button>
+          </div>
+          <Select value={String(selectedMonth)} onValueChange={v => setSelectedMonth(parseInt(v))}>
+            <SelectTrigger className="w-[120px] h-7 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MONTHS.map((m, i) => (
+                <SelectItem key={i} value={String(i)}>{m}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Ultra-compact metrics grid — 3 cols mobile, 6 cols desktop */}
@@ -119,10 +144,12 @@ const History = ({ userId }: { userId: string }) => {
         {monthlyMetrics.cards.map(m => (
           <div key={m.label} className="rounded-md border border-border bg-card px-1.5 py-1.5 text-center">
             <p className={`text-[11px] font-bold leading-none ${m.accent}`}>{m.label}</p>
-            <p className="text-sm font-bold leading-tight mt-0.5">{m.overall}</p>
-            <p className="text-[9px] text-muted-foreground/50 leading-none">{m.overallLabel}</p>
-            <p className="text-xs font-semibold leading-tight mt-0.5">{m.stage}</p>
-            <p className="text-[9px] text-muted-foreground/50 leading-none">{m.stageLabel}</p>
+            <p className="text-lg font-bold leading-tight mt-0.5">
+              {metricView === "overall" ? m.overall : m.stage}
+            </p>
+            <p className="text-[9px] text-muted-foreground/60 leading-none">
+              {metricView === "overall" ? m.overallLabel : m.stageLabel}
+            </p>
             <p className="text-[10px] text-muted-foreground mt-0.5 leading-none">{m.raw}</p>
           </div>
         ))}

@@ -57,6 +57,15 @@ const getNextWeekday = (d: Date): string => {
   return format(addDays(d, 1), "yyyy-MM-dd");
 };
 
+/** Skip = +2 calendar days. If that lands on a weekend, bump to Monday. */
+const getSkipDate = (d: Date): string => {
+  const target = addDays(d, 2);
+  const dow = dayOfWeek(target);
+  if (dow === 0) return format(addDays(target, 1), "yyyy-MM-dd"); // Sun → Mon
+  if (dow === 6) return format(addDays(target, 2), "yyyy-MM-dd"); // Sat → Mon
+  return format(target, "yyyy-MM-dd");
+};
+
 const Actions = ({ userId }: { userId: string }) => {
   const [followQueue, setFollowQueue] = useState<QueueItem[]>([]);
   const [dmQueue, setDmQueue] = useState<QueueItem[]>([]);
@@ -190,12 +199,12 @@ const Actions = ({ userId }: { userId: string }) => {
     saveScroll();
     // Optimistic removal
     setDmQueue(prev => prev.filter(item => item.id !== queueId));
-    const nextDay = getNextWeekday(now);
-    // Delete today's queue entry and create one for the next weekday
+    const skipDate = getSkipDate(now);
+    // Delete today's queue entry and create one for 2 days out
     await supabase.from("daily_queues").delete().eq("id", queueId);
-    await supabase.from("daily_queues").insert({ user_id: userId, contact_id: contactId, queue_date: nextDay, queue_type: "dm" as const });
+    await supabase.from("daily_queues").insert({ user_id: userId, contact_id: contactId, queue_date: skipDate, queue_type: "dm" as const });
     await supabase.from("contacts").update({ dm_skip_count: currentSkipCount + 1 } as any).eq("id", contactId);
-    toast.success(`Skipped → ${nextDay}`);
+    toast.success(`Skipped → ${skipDate}`);
   };
 
   const removeFromQueue = async (queueId: string, contactId: string, queueType: string) => {
@@ -227,6 +236,65 @@ const Actions = ({ userId }: { userId: string }) => {
       }
     }
     toast.success("Removed & replaced");
+    fetchData();
+  };
+
+  /** Delete a DM queue contact and backfill with a followed person + opener */
+  const removeFromDmQueue = async (queueId: string, contactId: string) => {
+    if (!isWeekdayToday) return;
+    const confirmed = window.confirm("Remove this contact from the DM queue and delete them permanently? A replacement will be added.");
+    if (!confirmed) return;
+    saveScroll();
+
+    // Optimistic removal
+    setDmQueue(prev => prev.filter(item => item.id !== queueId));
+
+    // Delete contact data
+    await supabase.from("openers").delete().eq("contact_id", contactId);
+    await supabase.from("daily_queues").delete().eq("contact_id", contactId);
+    await supabase.from("contacts").delete().eq("id", contactId);
+
+    // Find a replacement: a followed contact not already in today's DM queue
+    const { data: currentDmQueue } = await supabase
+      .from("daily_queues").select("contact_id").eq("user_id", userId).eq("queue_date", today).eq("queue_type", "dm");
+    const existingDmIds = new Set((currentDmQueue || []).map(q => q.contact_id));
+    existingDmIds.add(contactId);
+
+    // First try: followed contacts that already have an opener
+    const { data: withOpener } = await supabase
+      .from("contacts")
+      .select("id, openers!inner(opener_text)")
+      .eq("user_id", userId).eq("status", "followed")
+      .limit(50);
+    const openerMatch = (withOpener || []).filter((c: any) => !existingDmIds.has(c.id));
+
+    let replacementId: string | null = null;
+    if (openerMatch.length > 0) {
+      replacementId = openerMatch[0].id;
+    } else {
+      // Fallback: any followed contact
+      const { data: anyFollowed } = await supabase
+        .from("contacts").select("id").eq("user_id", userId).eq("status", "followed").limit(50);
+      const available = (anyFollowed || []).filter(c => !existingDmIds.has(c.id));
+      if (available.length > 0) {
+        replacementId = available[0].id;
+      }
+    }
+
+    if (replacementId) {
+      await supabase.from("daily_queues").insert({ user_id: userId, contact_id: replacementId, queue_date: today, queue_type: "dm" as const });
+      // Trigger opener generation for the replacement if needed
+      try {
+        await fetch("/api/generate-openers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId }),
+        });
+      } catch { /* best effort */ }
+      toast.success("Removed & replaced with new DM contact");
+    } else {
+      toast.success("Removed (no followed contacts available to backfill)");
+    }
     fetchData();
   };
 
@@ -265,9 +333,16 @@ const Actions = ({ userId }: { userId: string }) => {
       .from("daily_queues").select("contact_id").eq("user_id", userId).eq("queue_date", today).eq("queue_type", "dm");
 
     const existingDmIds = new Set((existingDms || []).map(q => q.contact_id));
+
+    // Only count fresh (non-skipped) DMs toward the 30 cap
+    const existingDmContactIds = (existingDms || []).map(q => q.contact_id);
+    const { data: existingDmContacts } = await supabase
+      .from("contacts").select("id, dm_skip_count").in("id", existingDmContactIds.length > 0 ? existingDmContactIds : ["__none__"]);
+    const freshDmCount = (existingDmContacts || []).filter(c => (c.dm_skip_count || 0) === 0).length;
+
     const carryoverContactIds = (unsentDms || []).map(d => d.contact_id).filter(id => !existingDmIds.has(id));
     const newFollowContactIds = (yesterdayFollowed || []).map(f => f.contact_id).filter(id => !existingDmIds.has(id) && !carryoverContactIds.includes(id));
-    const allNewDmContactIds = [...carryoverContactIds, ...newFollowContactIds].slice(0, DM_LIMIT - (existingDms?.length || 0));
+    const allNewDmContactIds = [...carryoverContactIds, ...newFollowContactIds].slice(0, DM_LIMIT - freshDmCount);
 
     if (allNewDmContactIds.length > 0) {
       await supabase.from("daily_queues").insert(allNewDmContactIds.map(contactId => ({ user_id: userId, contact_id: contactId, queue_date: today, queue_type: "dm" as const })));
@@ -392,6 +467,8 @@ const Actions = ({ userId }: { userId: string }) => {
   const followCompleted = followQueue.filter(q => q.completed).length;
   const dmCompleted = dmQueue.filter(q => q.completed).length;
   const dmTotal = dmQueue.length;
+  const freshDms = sortedDmQueue.filter(item => (item.contacts?.dm_skip_count || 0) === 0);
+  const skippedDms = sortedDmQueue.filter(item => (item.contacts?.dm_skip_count || 0) > 0);
 
   const followUpsA = followUps.filter(f => f.current_follow_up?.endsWith("A"));
   const followUpsB = followUps.filter(f => f.current_follow_up?.endsWith("B"));
@@ -429,7 +506,7 @@ const Actions = ({ userId }: { userId: string }) => {
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           {activeTab === "follow"
             ? `Follow (${followCompleted}/${FOLLOW_LIMIT})`
-            : `DM (${dmCompleted}/${dmTotal})`}
+            : `DM (${dmCompleted}/${freshDms.length})${skippedDms.length > 0 ? ` · Skipped ${skippedDms.length}` : ""}`}
         </h2>
         <div className="inline-flex items-center rounded-full border border-border p-0.5">
           <button
@@ -515,75 +592,158 @@ const Actions = ({ userId }: { userId: string }) => {
           {dmQueue.length === 0 && (
             <p className="py-8 text-center text-sm text-muted-foreground">No DMs queued. Yesterday's completed follows will appear here.</p>
           )}
-          {sortedDmQueue.map((item) => {
-            const opener = openers[item.contact_id];
-            return (
-              <div
-                key={item.id}
-                className={`rounded-lg border border-border bg-card px-3 py-3 transition-all ${
-                  item.completed ? "opacity-50" : ""
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Checkbox
-                    checked={item.completed}
-                    onCheckedChange={() => toggleComplete(item.id, item.completed, "dm", item.contact_id)}
-                    className="h-5 w-5 shrink-0"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <p className={`text-sm font-medium ${item.completed ? "line-through" : ""}`}>
-                        {item.contacts?.full_name || "Unknown"}
-                      </p>
-                      {(item.contacts?.dm_skip_count || 0) > 0 && (
-                        <span className={`text-[10px] rounded-md px-1.5 py-0.5 font-medium ${
-                          (item.contacts?.dm_skip_count || 0) >= 7
-                            ? "bg-destructive/15 text-destructive"
-                            : "bg-orange-500/15 text-orange-500"
-                        }`}>
-                          {(item.contacts?.dm_skip_count || 0) >= 7 ? "7+ skips" : `Skipped ${item.contacts?.dm_skip_count}×`}
-                        </span>
+
+          {/* Fresh DMs section */}
+          {freshDms.length > 0 && (
+            <>
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Fresh DMs ({freshDms.filter(i => i.completed).length}/{freshDms.length})
+              </h3>
+              {freshDms.map((item) => {
+                const opener = openers[item.contact_id];
+                return (
+                  <div
+                    key={item.id}
+                    className={`rounded-lg border border-border bg-card px-3 py-3 transition-all ${
+                      item.completed ? "opacity-50" : ""
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Checkbox
+                        checked={item.completed}
+                        onCheckedChange={() => toggleComplete(item.id, item.completed, "dm", item.contact_id)}
+                        className="h-5 w-5 shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-medium ${item.completed ? "line-through" : ""}`}>
+                          {item.contacts?.full_name || "Unknown"}
+                        </p>
+                        {item.contacts?.username && (
+                          <p className="text-xs text-muted-foreground">@{item.contacts.username}</p>
+                        )}
+                      </div>
+                      {!item.completed && (
+                        <button
+                          onClick={() => removeFromDmQueue(item.id, item.contact_id)}
+                          className="shrink-0 rounded-md p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
+                          title="Remove & replace"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
                       )}
+                      <a
+                        href={item.contacts?.profile_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => handleProfileClick(item)}
+                        className="shrink-0 rounded-md p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
                     </div>
-                    {item.contacts?.username && (
-                      <p className="text-xs text-muted-foreground">@{item.contacts.username}</p>
+                    {opener && !item.completed && (
+                      <div className="mt-2 ml-8 flex items-center gap-2">
+                        <p className="flex-1 min-w-0 rounded-md bg-secondary px-3 py-2 text-sm text-secondary-foreground break-words">
+                          {opener}
+                        </p>
+                        <button
+                          onClick={() => copyOpener(opener)}
+                          className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                      </div>
                     )}
                   </div>
-                  {!item.completed && (
-                    <button
-                      onClick={() => skipDm(item.id, item.contact_id, item.contacts?.dm_skip_count || 0)}
-                      className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-orange-500/15 hover:text-orange-500 transition-colors"
-                      title="Skip → Tomorrow (private/restricted)"
-                    >
-                      <Clock className="h-4 w-4" />
-                    </button>
-                  )}
-                  <a
-                    href={item.contacts?.profile_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => handleProfileClick(item)}
-                    className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                );
+              })}
+            </>
+          )}
+
+          {/* Skipped / Private section */}
+          {skippedDms.length > 0 && (
+            <>
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-orange-500 mt-4 pt-3 border-t border-border">
+                Skipped / Private ({skippedDms.length})
+              </h3>
+              {skippedDms.map((item) => {
+                const opener = openers[item.contact_id];
+                return (
+                  <div
+                    key={item.id}
+                    className={`rounded-lg border border-orange-500/20 bg-card px-3 py-3 transition-all ${
+                      item.completed ? "opacity-50" : ""
+                    }`}
                   >
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                </div>
-                {opener && !item.completed && (
-                  <div className="mt-2 ml-8 flex items-center gap-2">
-                    <p className="flex-1 min-w-0 rounded-md bg-secondary px-3 py-2 text-sm text-secondary-foreground break-words">
-                      {opener}
-                    </p>
-                    <button
-                      onClick={() => copyOpener(opener)}
-                      className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-                    >
-                      <Copy className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <Checkbox
+                        checked={item.completed}
+                        onCheckedChange={() => toggleComplete(item.id, item.completed, "dm", item.contact_id)}
+                        className="h-5 w-5 shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className={`text-sm font-medium ${item.completed ? "line-through" : ""}`}>
+                            {item.contacts?.full_name || "Unknown"}
+                          </p>
+                          <span className={`text-[10px] rounded-md px-1.5 py-0.5 font-medium ${
+                            (item.contacts?.dm_skip_count || 0) >= 7
+                              ? "bg-destructive/15 text-destructive"
+                              : "bg-orange-500/15 text-orange-500"
+                          }`}>
+                            {(item.contacts?.dm_skip_count || 0) >= 7 ? "7+ skips" : `Skipped ${item.contacts?.dm_skip_count}×`}
+                          </span>
+                        </div>
+                        {item.contacts?.username && (
+                          <p className="text-xs text-muted-foreground">@{item.contacts.username}</p>
+                        )}
+                      </div>
+                      {!item.completed && (
+                        <button
+                          onClick={() => skipDm(item.id, item.contact_id, item.contacts?.dm_skip_count || 0)}
+                          className="shrink-0 rounded-md p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:bg-orange-500/15 hover:text-orange-500 transition-colors"
+                          title="Skip → +2 days"
+                        >
+                          <Clock className="h-4 w-4" />
+                        </button>
+                      )}
+                      {!item.completed && (
+                        <button
+                          onClick={() => removeFromDmQueue(item.id, item.contact_id)}
+                          className="shrink-0 rounded-md p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
+                          title="Remove & replace"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                      <a
+                        href={item.contacts?.profile_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => handleProfileClick(item)}
+                        className="shrink-0 rounded-md p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </div>
+                    {opener && !item.completed && (
+                      <div className="mt-2 ml-8 flex items-center gap-2">
+                        <p className="flex-1 min-w-0 rounded-md bg-secondary px-3 py-2 text-sm text-secondary-foreground break-words">
+                          {opener}
+                        </p>
+                        <button
+                          onClick={() => copyOpener(opener)}
+                          className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+            </>
+          )}
         </div>
       )}
 
