@@ -21,17 +21,43 @@ export default async function handler(req, res) {
 
     const { userId } = req.body || {};
 
-    // Get contacts that are followed but don't have openers yet
-    let query = supabase
+    // Get contacts in today's DM queue + any followed contacts needing openers
+    const today = new Date().toISOString().slice(0, 10);
+    let dmQueueQuery = supabase
+      .from("daily_queues")
+      .select("contact_id")
+      .eq("queue_date", today)
+      .eq("queue_type", "dm");
+    if (userId) dmQueueQuery = dmQueueQuery.eq("user_id", userId);
+    const { data: dmQueueEntries } = await dmQueueQuery;
+    const dmContactIds = (dmQueueEntries || []).map((q) => q.contact_id);
+
+    // Get DM queue contacts
+    let dmContacts = [];
+    if (dmContactIds.length > 0) {
+      const { data } = await supabase
+        .from("contacts")
+        .select("id, user_id, full_name, biography")
+        .in("id", dmContactIds);
+      dmContacts = data || [];
+    }
+
+    // Also get followed contacts as fallback
+    let followedQuery = supabase
       .from("contacts")
       .select("id, user_id, full_name, biography")
       .eq("status", "followed")
       .is("dmed_at", null);
+    if (userId) followedQuery = followedQuery.eq("user_id", userId);
+    const { data: followedContacts } = await followedQuery.limit(100);
 
-    if (userId) query = query.eq("user_id", userId);
-
-    const { data: contacts, error: fetchError } = await query.limit(100);
-    if (fetchError) throw fetchError;
+    // Merge and deduplicate
+    const seenIds = new Set();
+    const contacts = [];
+    for (const c of [...dmContacts, ...(followedContacts || [])]) {
+      if (!seenIds.has(c.id)) { seenIds.add(c.id); contacts.push(c); }
+    }
+    const fetchError = null;
 
     if (!contacts || contacts.length === 0) {
       return res.status(200).json({ message: "No contacts need openers" });
@@ -80,7 +106,7 @@ Return exactly ${batch.length} lines, one opener per contact:`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "openai/gpt-oss-120b",
+          model: "llama-3.3-70b-versatile",
           messages: [{ role: "user", content: prompt }],
           temperature: 0.3,
           max_tokens: 1000,

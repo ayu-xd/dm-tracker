@@ -254,7 +254,7 @@ const Actions = ({ userId }: { userId: string }) => {
     const existingIds = new Set((currentQueue || []).map(q => q.contact_id));
     existingIds.add(contactId);
     const { data: candidates } = await supabase
-      .from("contacts").select("id").eq("user_id", userId).eq("status", "followed").or("dm_skip_count.eq.0,dm_skip_count.is.null").limit(50);
+      .from("contacts").select("id").eq("user_id", userId).eq("status", "followed").lt("followed_at", today).or("dm_skip_count.eq.0,dm_skip_count.is.null").limit(50);
     const available = (candidates || []).filter(c => !existingIds.has(c.id));
     if (available.length > 0) {
       const newContactId = available[0].id;
@@ -326,8 +326,17 @@ const Actions = ({ userId }: { userId: string }) => {
       .from("contacts").select("id, dm_skip_count").in("id", existingDmContactIds.length > 0 ? existingDmContactIds : ["__none__"]);
     const freshDmCount = (existingDmContacts || []).filter(c => (c.dm_skip_count || 0) === 0).length;
 
-    const carryoverContactIds = (unsentDms || []).map(d => d.contact_id).filter(id => !existingDmIds.has(id));
-    const newFollowContactIds = (yesterdayFollowed || []).map(f => f.contact_id).filter(id => !existingDmIds.has(id) && !carryoverContactIds.includes(id));
+    const carryoverContactIds = [...new Set((unsentDms || []).map(d => d.contact_id))].filter(id => !existingDmIds.has(id));
+
+    // Filter out contacts already marked as dmed (already sent previously)
+    const yesterdayIds = (yesterdayFollowed || []).map(f => f.contact_id);
+    let alreadyDmedIds = new Set<string>();
+    if (yesterdayIds.length > 0) {
+      const { data: alreadyDmed } = await supabase
+        .from("contacts").select("id").in("id", yesterdayIds).eq("status", "dmed");
+      alreadyDmedIds = new Set((alreadyDmed || []).map(c => c.id));
+    }
+    const newFollowContactIds = yesterdayIds.filter(id => !existingDmIds.has(id) && !carryoverContactIds.includes(id) && !alreadyDmedIds.has(id));
     // Fresh 30-cap is independent of carryovers — skipped DMs don't steal fresh slots
     const freshNewFollows = newFollowContactIds.slice(0, DM_LIMIT - freshDmCount);
     const allNewDmContactIds = [...carryoverContactIds, ...freshNewFollows];
@@ -342,6 +351,15 @@ const Actions = ({ userId }: { userId: string }) => {
         await supabase.from("daily_queues").delete().eq("user_id", userId).eq("queue_type", "dm").eq("completed", false).lt("queue_date", today).in("contact_id", carriedOverIds);
       }
     }
+
+    // Auto-generate openers for all new DM contacts
+    try {
+      await fetch("/api/generate-openers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+    } catch (_) {}
 
     fetchData();
   };
