@@ -135,6 +135,27 @@ const Actions = ({ userId }: { userId: string }) => {
       }
     }
 
+    // Purge ghost entries: delete any uncompleted DM queue entries (today + future) for contacts already "dmed"
+    const uncompletedDmIds = dmData.filter(q => !q.completed).map(q => q.contact_id);
+    if (uncompletedDmIds.length > 0) {
+      const { data: ghostDmed } = await supabase
+        .from("contacts").select("id").in("id", uncompletedDmIds).eq("status", "dmed");
+      const ghostIds = (ghostDmed || []).map(c => c.id);
+      if (ghostIds.length > 0) {
+        // Remove these ghost entries from today's queue
+        const ghostQueueIds = dmData.filter(q => !q.completed && ghostIds.includes(q.contact_id)).map(q => q.id);
+        if (ghostQueueIds.length > 0) {
+          await supabase.from("daily_queues").delete().in("id", ghostQueueIds);
+        }
+        // Also purge any future ghost entries for these contacts
+        await supabase.from("daily_queues").delete().eq("user_id", userId).eq("queue_type", "dm").eq("completed", false).gt("queue_date", today).in("contact_id", ghostIds);
+        // Remove from local state
+        const ghostSet = new Set(ghostIds);
+        const cleanedDms = dmData.filter(q => q.completed || !ghostSet.has(q.contact_id));
+        setDmQueue(cleanedDms);
+      }
+    }
+
     setLoading(false);
     requestAnimationFrame(() => restoreScroll());
   }, [userId, today]);
@@ -326,7 +347,15 @@ const Actions = ({ userId }: { userId: string }) => {
       .from("contacts").select("id, dm_skip_count").in("id", existingDmContactIds.length > 0 ? existingDmContactIds : ["__none__"]);
     const freshDmCount = (existingDmContacts || []).filter(c => (c.dm_skip_count || 0) === 0).length;
 
-    const carryoverContactIds = [...new Set((unsentDms || []).map(d => d.contact_id))].filter(id => !existingDmIds.has(id));
+    const rawCarryoverIds = [...new Set((unsentDms || []).map(d => d.contact_id))].filter(id => !existingDmIds.has(id));
+    // Filter out contacts already marked as dmed from carryovers
+    let carryoverDmedIds = new Set<string>();
+    if (rawCarryoverIds.length > 0) {
+      const { data: carryDmed } = await supabase
+        .from("contacts").select("id").in("id", rawCarryoverIds).eq("status", "dmed");
+      carryoverDmedIds = new Set((carryDmed || []).map(c => c.id));
+    }
+    const carryoverContactIds = rawCarryoverIds.filter(id => !carryoverDmedIds.has(id));
 
     // Filter out contacts already marked as dmed (already sent previously)
     const yesterdayIds = (yesterdayFollowed || []).map(f => f.contact_id);
