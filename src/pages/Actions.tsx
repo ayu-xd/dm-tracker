@@ -135,11 +135,11 @@ const Actions = ({ userId }: { userId: string }) => {
       }
     }
 
-    // Purge ghost entries: delete any uncompleted DM queue entries (today + future) for contacts already "dmed"
+    // Purge ghost entries: delete any uncompleted DM queue entries (today + future) for contacts already DMed (any downstream status)
     const uncompletedDmIds = dmData.filter(q => !q.completed).map(q => q.contact_id);
     if (uncompletedDmIds.length > 0) {
       const { data: ghostDmed } = await supabase
-        .from("contacts").select("id").in("id", uncompletedDmIds).eq("status", "dmed");
+        .from("contacts").select("id").in("id", uncompletedDmIds).in("status", ["dmed", "initiated", "engaged", "calendly_sent", "booked"]);
       const ghostIds = (ghostDmed || []).map(c => c.id);
       if (ghostIds.length > 0) {
         // Remove these ghost entries from today's queue
@@ -268,7 +268,12 @@ const Actions = ({ userId }: { userId: string }) => {
     setDmQueue(prev => prev.filter(item => item.id !== queueId));
     await supabase.from("openers").delete().eq("contact_id", contactId);
     await supabase.from("daily_queues").delete().eq("contact_id", contactId);
-    await supabase.from("contacts").delete().eq("id", contactId);
+    // Only delete contact if they haven't been DMed yet — preserve metrics
+    const { data: contactData } = await supabase.from("contacts").select("status, dmed_at").eq("id", contactId).single();
+    const dmedStatuses = ["dmed", "initiated", "engaged", "calendly_sent", "booked"];
+    if (!contactData || (!dmedStatuses.includes(contactData.status) && !contactData.dmed_at)) {
+      await supabase.from("contacts").delete().eq("id", contactId);
+    }
     // Backfill: find a followed contact not already in today's DM queue
     const { data: currentQueue } = await supabase
       .from("daily_queues").select("contact_id").eq("user_id", userId).eq("queue_date", today).eq("queue_type", "dm");
@@ -301,8 +306,15 @@ const Actions = ({ userId }: { userId: string }) => {
     setDmQueue(prev => prev.filter(item => item.id !== queueId));
     await supabase.from("openers").delete().eq("contact_id", contactId);
     await supabase.from("daily_queues").delete().eq("contact_id", contactId);
-    await supabase.from("contacts").delete().eq("id", contactId);
-    toast.success("Contact deleted");
+    // Only delete contact if they haven't been DMed yet — preserve metrics
+    const { data: contactData } = await supabase.from("contacts").select("status, dmed_at").eq("id", contactId).single();
+    const dmedStatuses = ["dmed", "initiated", "engaged", "calendly_sent", "booked"];
+    if (!contactData || (!dmedStatuses.includes(contactData.status) && !contactData.dmed_at)) {
+      await supabase.from("contacts").delete().eq("id", contactId);
+      toast.success("Contact deleted");
+    } else {
+      toast.success("Removed from queue (contact preserved for metrics)");
+    }
   };
 
   const autoQueue = async () => {

@@ -39,6 +39,28 @@ const History = ({ userId }: { userId: string }) => {
         .eq("user_id", userId).neq("status", "not_started"),
       supabase.from("contacts").select("id").eq("user_id", userId).eq("status", "flywheel"),
     ]);
+
+    // Reconcile: fix contacts with downstream status but dmed_at = null
+    const downstreamStatuses = ["dmed", "initiated", "engaged", "calendly_sent", "booked"];
+    const missingDmedAt = (data || []).filter((c: any) => downstreamStatuses.includes(c.status) && !c.dmed_at);
+    if (missingDmedAt.length > 0) {
+      // Try to recover dates from completed DM queue entries
+      const missingIds = missingDmedAt.map((c: any) => c.id);
+      const { data: queueEntries } = await supabase
+        .from("daily_queues").select("contact_id, completed_at, queue_date")
+        .in("contact_id", missingIds).eq("queue_type", "dm").eq("completed", true);
+      const queueMap: Record<string, string> = {};
+      (queueEntries || []).forEach((q: any) => {
+        if (!queueMap[q.contact_id]) queueMap[q.contact_id] = q.completed_at || q.queue_date;
+      });
+      for (const c of missingDmedAt as any[]) {
+        // Use queue completed_at, or initiated_at (they were DMed before initiated), or now
+        const recoveredDate = queueMap[c.id] || c.initiated_at || c.engaged_at || new Date().toISOString();
+        await supabase.from("contacts").update({ dmed_at: recoveredDate }).eq("id", c.id);
+        c.dmed_at = recoveredDate; // fix local data too
+      }
+    }
+
     setContacts((data as Contact[]) || []);
     setFlywheelCount((fwData || []).length);
     setLoading(false);
