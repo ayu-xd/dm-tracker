@@ -75,6 +75,7 @@ const Actions = ({ userId }: { userId: string }) => {
   const [generating, setGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState<"follow" | "dm">("follow");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const autoQueueRunning = useRef(false);
   const scrollKey = "actions-scroll-pos";
 
   const now = new Date();
@@ -139,7 +140,7 @@ const Actions = ({ userId }: { userId: string }) => {
     const uncompletedDmIds = dmData.filter(q => !q.completed).map(q => q.contact_id);
     if (uncompletedDmIds.length > 0) {
       const { data: ghostDmed } = await supabase
-        .from("contacts").select("id").in("id", uncompletedDmIds).in("status", ["dmed", "initiated", "engaged", "calendly_sent", "booked"]);
+        .from("contacts").select("id").in("id", uncompletedDmIds).in("status", ["dmed", "initiated", "engaged", "calendly_sent", "booked", "flywheel"]);
       const ghostIds = (ghostDmed || []).map(c => c.id);
       if (ghostIds.length > 0) {
         // Remove these ghost entries from today's queue
@@ -198,14 +199,23 @@ const Actions = ({ userId }: { userId: string }) => {
       return;
     }
 
-    const contactUpdate: Record<string, any> = queueType === "follow"
-      ? { status: !completed ? "followed" : "not_started", followed_at: !completed ? nowIso : null }
-      : { status: !completed ? "dmed" : "followed", dmed_at: !completed ? nowIso : null };
-    // Reset skip count when DM is completed
-    if (queueType === "dm" && !completed) contactUpdate.dm_skip_count = 0;
-    const { error: contactErr } = await supabase.from("contacts").update(contactUpdate).eq("id", contactId);
-    if (contactErr) {
-      toast.error(`Contact update failed: ${contactErr.message}`);
+    // Only update contact status if we're checking (completing) OR if contact is still at the expected stage
+    if (!completed) {
+      // Checking: mark as followed/dmed
+      const contactUpdate: Record<string, any> = queueType === "follow"
+        ? { status: "followed", followed_at: nowIso }
+        : { status: "dmed", dmed_at: nowIso, dm_skip_count: 0 };
+      await supabase.from("contacts").update(contactUpdate).eq("id", contactId);
+    } else {
+      // Unchecking: only revert if contact hasn't progressed past the expected stage
+      const { data: currentContact } = await supabase.from("contacts").select("status").eq("id", contactId).single();
+      const currentStatus = currentContact?.status;
+      if (queueType === "follow" && currentStatus === "followed") {
+        await supabase.from("contacts").update({ status: "not_started", followed_at: null }).eq("id", contactId);
+      } else if (queueType === "dm" && currentStatus === "dmed") {
+        await supabase.from("contacts").update({ status: "followed", dmed_at: null }).eq("id", contactId);
+      }
+      // If contact has progressed (initiated, engaged, etc.), do NOT revert their status
     }
     fetchData();
   };
@@ -221,8 +231,9 @@ const Actions = ({ userId }: { userId: string }) => {
     // Optimistic removal
     setDmQueue(prev => prev.filter(item => item.id !== queueId));
     const skipDate = getSkipDate(now);
-    // Delete today's queue entry and create one for 2 days out
+    // Delete today's queue entry and any existing entry on skipped date, then create new one
     await supabase.from("daily_queues").delete().eq("id", queueId);
+    await supabase.from("daily_queues").delete().eq("user_id", userId).eq("contact_id", contactId).eq("queue_date", skipDate).eq("queue_type", "dm");
     await supabase.from("daily_queues").insert({ user_id: userId, contact_id: contactId, queue_date: skipDate, queue_type: "dm" as const });
     await supabase.from("contacts").update({ dm_skip_count: currentSkipCount + 1 } as any).eq("id", contactId);
     toast.success(`Skipped → ${skipDate}`);
@@ -319,6 +330,12 @@ const Actions = ({ userId }: { userId: string }) => {
 
   const autoQueue = async () => {
     if (!isWeekdayToday) return;
+    if (autoQueueRunning.current) return;
+    autoQueueRunning.current = true;
+    try { await _autoQueueImpl(); } finally { autoQueueRunning.current = false; }
+  };
+
+  const _autoQueueImpl = async () => {
 
     const { data: existing } = await supabase
       .from("daily_queues").select("id, contact_id").eq("user_id", userId).eq("queue_date", today).eq("queue_type", "follow");
@@ -359,25 +376,26 @@ const Actions = ({ userId }: { userId: string }) => {
       .from("contacts").select("id, dm_skip_count").in("id", existingDmContactIds.length > 0 ? existingDmContactIds : ["__none__"]);
     const freshDmCount = (existingDmContacts || []).filter(c => (c.dm_skip_count || 0) === 0).length;
 
+    const DOWNSTREAM = ["dmed", "initiated", "engaged", "calendly_sent", "booked", "flywheel"];
     const rawCarryoverIds = [...new Set((unsentDms || []).map(d => d.contact_id))].filter(id => !existingDmIds.has(id));
-    // Filter out contacts already marked as dmed from carryovers
-    let carryoverDmedIds = new Set<string>();
+    // Filter out contacts already at any downstream status from carryovers
+    let carryoverExcludeIds = new Set<string>();
     if (rawCarryoverIds.length > 0) {
-      const { data: carryDmed } = await supabase
-        .from("contacts").select("id").in("id", rawCarryoverIds).eq("status", "dmed");
-      carryoverDmedIds = new Set((carryDmed || []).map(c => c.id));
+      const { data: carryExclude } = await supabase
+        .from("contacts").select("id").in("id", rawCarryoverIds).in("status", DOWNSTREAM);
+      carryoverExcludeIds = new Set((carryExclude || []).map(c => c.id));
     }
-    const carryoverContactIds = rawCarryoverIds.filter(id => !carryoverDmedIds.has(id));
+    const carryoverContactIds = rawCarryoverIds.filter(id => !carryoverExcludeIds.has(id));
 
-    // Filter out contacts already marked as dmed (already sent previously)
+    // Filter out contacts no longer in "followed" status (already DMed, advanced, or deleted)
     const yesterdayIds = (yesterdayFollowed || []).map(f => f.contact_id);
-    let alreadyDmedIds = new Set<string>();
+    let validFollowedIds = new Set<string>();
     if (yesterdayIds.length > 0) {
-      const { data: alreadyDmed } = await supabase
-        .from("contacts").select("id").in("id", yesterdayIds).eq("status", "dmed");
-      alreadyDmedIds = new Set((alreadyDmed || []).map(c => c.id));
+      const { data: stillFollowed } = await supabase
+        .from("contacts").select("id").in("id", yesterdayIds).eq("status", "followed");
+      validFollowedIds = new Set((stillFollowed || []).map(c => c.id));
     }
-    const newFollowContactIds = yesterdayIds.filter(id => !existingDmIds.has(id) && !carryoverContactIds.includes(id) && !alreadyDmedIds.has(id));
+    const newFollowContactIds = yesterdayIds.filter(id => validFollowedIds.has(id) && !existingDmIds.has(id) && !carryoverContactIds.includes(id));
     // Fresh 30-cap is independent of carryovers — skipped DMs don't steal fresh slots
     const freshNewFollows = newFollowContactIds.slice(0, DM_LIMIT - freshDmCount);
     const allNewDmContactIds = [...carryoverContactIds, ...freshNewFollows];

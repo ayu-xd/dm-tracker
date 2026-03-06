@@ -116,6 +116,8 @@ const Pipeline = ({ userId }: { userId: string }) => {
     }
 
     await supabase.from("contacts").update(updates).eq("id", contactId);
+    // Clean up any lingering uncompleted DM queue entries for this contact
+    await supabase.from("daily_queues").delete().eq("contact_id", contactId).eq("queue_type", "dm").eq("completed", false);
     toast.success(`Moved to ${newStatus.replace("_", " ")}`);
     fetchContacts(true);
   };
@@ -147,6 +149,8 @@ const Pipeline = ({ userId }: { userId: string }) => {
       current_follow_up: null,
       last_follow_up_at: null,
     }).eq("id", contactId);
+    // Clean up any lingering uncompleted queue entries for this contact
+    await supabase.from("daily_queues").delete().eq("contact_id", contactId).eq("completed", false);
     toast.success("→ Flywheel (90d)");
     fetchContacts(true);
   };

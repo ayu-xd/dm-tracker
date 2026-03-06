@@ -287,9 +287,16 @@ const FlywheelSection = ({ userId }: { userId: string }) => {
       last_follow_up_at: null, initiated_at: null, negative_reply: false,
       flywheel_reason: null, engaged_at: null, calendly_sent_at: null, booked_at: null,
     }).eq("id", contactId);
-    await supabase.from("daily_queues").insert({
-      user_id: userId, contact_id: contactId, queue_date: today, queue_type: "follow",
-    });
+    // Clean up any existing queue entries for this contact, then insert into today's follow queue
+    await supabase.from("daily_queues").delete().eq("contact_id", contactId).eq("completed", false);
+    // Only insert if not already in today's follow queue
+    const { data: existing } = await supabase.from("daily_queues").select("id")
+      .eq("user_id", userId).eq("contact_id", contactId).eq("queue_date", today).eq("queue_type", "follow");
+    if (!existing || existing.length === 0) {
+      await supabase.from("daily_queues").insert({
+        user_id: userId, contact_id: contactId, queue_date: today, queue_type: "follow",
+      });
+    }
   };
 
   const totalFlywheel = readyContacts.length + waitingContacts.length;
